@@ -1,7 +1,7 @@
 # ==============================================================================
 # Proyecto: HORIZON
 # Autor: APNAPDEV
-# Repositorio Oficial: https://github.com/APNAPDEV/Neb_Tools
+# Repositorio Oficial: https://github.com/APNAPDEV/ARKcangel
 # Licencia: GNU GPLv3
 #
 # Queda prohibida la redistribución o presentación de este código como propio

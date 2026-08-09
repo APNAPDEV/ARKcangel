@@ -1,6 +1,6 @@
-Neb_Tools Suite de herramientas de terminal para control de red, cifrado y monitoreo — sin GUI, sin dependencias pesadas, 100% línea de comandos.
+ARKcangel Suite de herramientas de terminal para control de red, cifrado y monitoreo — sin GUI, sin dependencias pesadas, 100% línea de comandos.
 
-NEB_TOOLS
+ARKcangel
 
 Una suite de herramientas de seguridad y redes construida para vivir en la terminal.
 
@@ -14,7 +14,7 @@ Tres proyectos, un mismo propósito: darte control total sobre tu red y tus dato
 
 Por qué existe
 
-Cansado de depender de herramientas gráficas pesadas o de confiar mi seguridad a software que no puedo auditar, construí NEB_TOOLS: scripts en Python puro, auditables, sin telemetría, pensados para quien vive en la terminal.
+Cansado de depender de herramientas gráficas pesadas o de confiar mi seguridad a software que no puedo auditar, construí ARKcangel: scripts en Python puro, auditables, sin telemetría, pensados para quien vive en la terminal.
 
 Requisitos
 
