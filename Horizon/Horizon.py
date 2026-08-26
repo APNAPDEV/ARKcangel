@@ -1,7 +1,7 @@
 # ==============================================================================
 # Proyecto: HORIZON
 # Autor: APNAPDEV
-# Repositorio Oficial: https://github.com/APNAPDEV/ARKcangel
+# Repositorio Oficial: github.com/APNAPDEV/ARKcangel
 # Licencia: GNU GPLv3
 #
 # Queda prohibida la redistribución o presentación de este código como propio
@@ -11,24 +11,32 @@
 # Autor original: Adrian C. — APNAPDEV © 2023-2026/2027
 
 """
-Argus - Monitor de tráfico de red en terminal
+Horizon - Monitor de tráfico de red en terminal, con bandeja del sistema
 Compatible con Windows (y Linux/Mac con pequeños ajustes de permisos)
 
 Requisitos:
-    pip install psutil rich
+    pip install psutil rich pystray pillow plyer
     (opcional, para captura de paquetes y DNS) pip install scapy
-    En Windows, scapy necesita Npcap instalado: https://npcap.com/#download!!!!!!!!
+    En Windows, scapy necesita Npcap instalado: https://npcap.com/#download
     (marca la opción "WinPcap API-compatible mode" al instalar)
 
 Ejecuta la terminal como Administrador para desbloquear:
     - Ver el proceso dueño de TODAS las conexiones (no solo las tuyas)
     - Captura de paquetes (DNS + tráfico por proceso), vía scapy/Npcap
+
+Bandeja del sistema:
+    - Click derecho en el icono de la bandeja para Mostrar/Ocultar la consola,
+      guardar las IPs conocidas al vuelo, o salir de forma segura.
+    - El núcleo (captura, detección de IPs nuevas, alertas) sigue funcionando
+      aunque la ventana esté oculta; solo se pausa el redibujado en pantalla.
 """
 
 import argparse
+import ctypes
 import json
 import os
 import socket
+import sys
 import threading
 import time
 from collections import deque, defaultdict
@@ -41,6 +49,21 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+
+# --- Bandeja del sistema (opcional, requiere pystray + pillow) ---
+try:
+    import pystray
+    from PIL import Image, ImageDraw
+    TRAY_AVAILABLE = True
+except Exception:
+    TRAY_AVAILABLE = False
+
+# --- Notificaciones nativas de Windows (opcional, requiere plyer) ---
+try:
+    from plyer import notification as toast
+    PLYER_AVAILABLE = True
+except Exception:
+    PLYER_AVAILABLE = False
 
 # --- Captura de paquetes / DNS (opcional, requiere scapy + Npcap en Windows) ---
 try:
@@ -58,10 +81,76 @@ hostname_cache = {}
 dns_log = deque(maxlen=15)
 known_ips = set()
 new_ips_this_session = set()
+alerted_ips = set()                                 # para no repetir notificación por la misma IP
 port_to_pid = {}                                   # puerto local -> pid (se refresca cada ciclo)
 proc_traffic = defaultdict(lambda: {"sent": 0, "recv": 0})  # pid -> bytes acumulados (vía captura)
 local_ips = set()
 lock = threading.Lock()
+
+# --- Estado de bandeja / visibilidad ---
+app_visible = True          # si la consola está mostrándose o escondida
+should_exit = threading.Event()   # se activa desde el menú "Salir de forma segura"
+console_hwnd = None
+latest_panels = {"connections": None, "bandwidth": None, "dns": None, "proc_traffic": None}
+
+SW_HIDE = 0
+SW_SHOW = 5
+CONSOLE_TITLE = f"Horizon-{os.getpid()}"   # título único para localizar la ventana real, sea cual sea el host
+
+
+def get_console_hwnd():
+    """
+    Obtiene el handle de la ventana de consola VISIBLE de verdad.
+
+    En Windows 11, los programas de consola suelen abrirse dentro de Windows
+    Terminal (no en conhost.exe clásico). Ahí, GetConsoleWindow() devuelve un
+    handle "fantasma" que usa ConPTY internamente — no la ventana que ves ni
+    la que aparece en la barra de tareas, que pertenece a un proceso aparte
+    (WindowsTerminal.exe). Por eso ocultar ese handle no tenía ningún efecto
+    visible.
+
+    En su lugar, ponemos un título único a la consola y buscamos la ventana
+    top-level real con ese título — esto funciona igual en conhost clásico
+    y en Windows Terminal (con la configuración por defecto).
+    """
+    try:
+        ctypes.windll.kernel32.SetConsoleTitleW(CONSOLE_TITLE)
+        time.sleep(0.15)  # da tiempo a que el título se propague a la ventana visible
+        hwnd = ctypes.windll.user32.FindWindowW(None, CONSOLE_TITLE)
+        if hwnd:
+            return hwnd
+        # Fallback: método clásico, por si corre en conhost puro sin Windows Terminal
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        return hwnd if hwnd else None
+    except Exception:
+        return None
+
+
+def set_console_visibility(show: bool):
+    """Muestra u oculta la ventana de consola vía la API de Windows (ctypes puro)."""
+    global console_hwnd
+    if console_hwnd is None:
+        console_hwnd = get_console_hwnd()
+    if not console_hwnd:
+        return
+    try:
+        ctypes.windll.user32.ShowWindow(console_hwnd, SW_SHOW if show else SW_HIDE)
+    except Exception:
+        pass
+
+
+def send_toast(title, message):
+    """Envía una notificación nativa de Windows si plyer está disponible. No bloqueante."""
+    if not PLYER_AVAILABLE:
+        return
+
+    def worker():
+        try:
+            toast.notify(title=title, message=message, app_name="Horizon", timeout=6)
+        except Exception:
+            pass
+
+    threading.Thread(target=worker, daemon=True).start()
 
 
 def get_local_ips():
@@ -177,6 +266,12 @@ def build_connections_table(show_dns_col=True):
             if ip not in known_ips and not is_private_ip(ip):
                 is_new = True
                 new_ips_this_session.add(ip)
+                if ip not in alerted_ips:
+                    alerted_ips.add(ip)
+                    send_toast(
+                        "Horizon · IP nueva detectada",
+                        f"{proc_name} → {ip}:{port}"
+                    )
 
         row = [proc_name, ip]
         if show_dns_col:
@@ -341,64 +436,164 @@ def build_layout():
     return layout
 
 
+# ==============================================================================
+# Módulo de Bandeja del Sistema (Capa de Control)
+# ==============================================================================
+
+def create_tray_image():
+    """Genera un icono simple en memoria (no requiere ningún archivo .ico externo)."""
+    img = Image.new("RGB", (64, 64), color=(10, 14, 25))
+    draw = ImageDraw.Draw(img)
+    draw.ellipse((6, 6, 58, 58), outline=(0, 200, 255), width=4)
+    draw.ellipse((24, 24, 40, 40), fill=(0, 200, 255))
+    return img
+
+
+def _toggle_visibility(icon, item):
+    global app_visible
+    app_visible = not app_visible
+    set_console_visibility(app_visible)
+
+
+def _save_ips_now(icon, item):
+    with lock:
+        known_ips.update(new_ips_this_session)
+    save_known_ips()
+    send_toast("Horizon", "IPs conocidas guardadas correctamente.")
+
+
+def _exit_safely(icon, item):
+    should_exit.set()
+    icon.stop()
+    set_console_visibility(True)  # aseguramos que la consola vuelva a mostrarse al salir
+
+
+def build_tray_icon():
+    menu = pystray.Menu(
+        pystray.MenuItem("Mostrar / Ocultar Horizon", _toggle_visibility, default=True),
+        pystray.MenuItem("Guardar IPs actuales", _save_ips_now),
+        pystray.MenuItem("Salir de forma segura", _exit_safely),
+    )
+    return pystray.Icon("horizon", create_tray_image(), "Horizon — Monitor de red", menu)
+
+
+# ==============================================================================
+# Núcleo Lógico (Operación Continua) — corre siempre, esté o no visible la consola
+# ==============================================================================
+
+def monitor_loop(interval):
+    """
+    Refresca conexiones, ancho de banda, DNS y tráfico por proceso en un ciclo
+    independiente del renderizado. Esto es lo que se sigue ejecutando aunque la
+    consola esté oculta: los datos nunca dejan de fluir, solo se deja de pintar.
+    """
+    prev_counters = psutil.net_io_counters()
+    while not should_exit.is_set():
+        conn_table = build_connections_table()
+        bw_panel, prev_counters = build_bandwidth_panel(prev_counters, interval)
+        dns_panel = build_dns_panel()
+        proc_panel = build_process_traffic_panel()
+
+        with lock:
+            latest_panels["connections"] = conn_table
+            latest_panels["bandwidth"] = bw_panel
+            latest_panels["dns"] = dns_panel
+            latest_panels["proc_traffic"] = proc_panel
+
+        time.sleep(interval)
+
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Argus - Monitor de tráfico de red")
+    parser = argparse.ArgumentParser(description="Horizon - Monitor de tráfico de red")
     parser.add_argument("--interval", type=float, default=2.0, help="Segundos entre refrescos")
     parser.add_argument("--no-capture", action="store_true", help="Desactiva captura de paquetes (DNS y tráfico por proceso)")
+    parser.add_argument("--no-tray", action="store_true", help="Desactiva la bandeja del sistema (modo consola clásico)")
     args = parser.parse_args()
 
     load_known_ips()
-    global local_ips
+    global local_ips, console_hwnd
     local_ips = get_local_ips()
+    console_hwnd = get_console_hwnd()
 
     capture_active = SCAPY_AVAILABLE and not args.no_capture
+    tray_active = TRAY_AVAILABLE and not args.no_tray
 
     console.print(Panel.fit(
         """[bold cyan]
-██╗  ██   ████╗  ██████╗ ██╗███████╗ ██████╗ ███╗   ██╗
+██╗  ██╗ ██████╗ ██████╗ ██╗███████╗ ██████╗ ███╗   ██╗
 ██║  ██║██╔═══██╗██╔══██╗██║╚══███╔╝██╔═══██╗████╗  ██║
 ███████║██║   ██║██████╔╝██║  ███╔╝ ██║   ██║██╔██╗ ██║
 ██╔══██║██║   ██║██╔══██╗██║ ███╔╝  ██║   ██║██║╚██╗██║
 ██║  ██║╚██████╔╝██║  ██║██║███████╗╚██████╔╝██║ ╚████║
 ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝
  H O R I Z O N  ·  v1.0  S C A N N I N G
- [/bold cyan] 
- 
- - Monitor de tráfico de red\n"""
+[/bold cyan]
+
+Monitor de tráfico de red\n"""
         f"IPs conocidas cargadas: {len(known_ips)}\n"
         f"Captura de paquetes (DNS + tráfico por proceso): {'activa' if capture_active else 'inactiva'}\n"
-        "[dim]Ctrl+C para salir. Al salir se te preguntará si quieres guardar las IPs nuevas como conocidas.[/dim]",
+        f"Bandeja del sistema: {'activa (click derecho en el icono)' if tray_active else 'inactiva'}\n"
+        "[dim]Ctrl+C, o el menú de la bandeja, para salir de forma segura.[/dim]",
         border_style="green"
     ))
     time.sleep(1.5)
 
-    if capture_active:
-        t = threading.Thread(target=packet_capture_thread, daemon=True)
-        t.start()
+    if not TRAY_AVAILABLE and not args.no_tray:
+        console.print("[dim]Bandeja no disponible: instala 'pystray' y 'pillow' para activarla.[/dim]")
+    if not PLYER_AVAILABLE:
+        console.print("[dim]Notificaciones no disponibles: instala 'plyer' para recibir alertas de IPs nuevas.[/dim]")
 
-    prev_counters = psutil.net_io_counters()
+    if capture_active:
+        threading.Thread(target=packet_capture_thread, daemon=True).start()
+
+    # Hilo del núcleo lógico: sigue vivo esté o no visible la consola.
+    threading.Thread(target=monitor_loop, args=(args.interval,), daemon=True).start()
+
+    tray_icon = None
+    if tray_active:
+        tray_icon = build_tray_icon()
+        threading.Thread(target=tray_icon.run, daemon=True).start()
+
     layout = build_layout()
 
     try:
-        with Live(layout, refresh_per_second=1, console=console):
-            while True:
-                layout["connections"].update(build_connections_table())
-                bw_panel, prev_counters = build_bandwidth_panel(prev_counters, args.interval)
-                layout["bandwidth"].update(bw_panel)
-                layout["dns"].update(build_dns_panel())
-                layout["proc_traffic"].update(build_process_traffic_panel())
-                time.sleep(args.interval)
+        while not should_exit.is_set():
+            if app_visible:
+                # Estado Visible: se repinta la interfaz mientras el usuario esté mirando.
+                with Live(layout, refresh_per_second=2, console=console) as live:
+                    while app_visible and not should_exit.is_set():
+                        with lock:
+                            panels = dict(latest_panels)
+                        if panels["connections"] is not None:
+                            layout["connections"].update(panels["connections"])
+                            layout["bandwidth"].update(panels["bandwidth"])
+                            layout["dns"].update(panels["dns"])
+                            layout["proc_traffic"].update(panels["proc_traffic"])
+                        time.sleep(0.5)
+            else:
+                # Estado Oculto: no se gasta CPU redibujando; los datos siguen
+                # acumulándose en monitor_loop() en segundo plano.
+                time.sleep(0.5)
     except KeyboardInterrupt:
-        console.print("\n[bold]Saliendo de Argus...[/bold]")
-        if new_ips_this_session:
-            console.print(f"Se detectaron [yellow]{len(new_ips_this_session)}[/yellow] IPs nuevas esta sesión.")
-            resp = console.input("¿Guardarlas como conocidas para no volver a resaltarlas? [s/N]: ")
-            if resp.strip().lower() == "s":
-                with lock:
-                    known_ips.update(new_ips_this_session)
-                save_known_ips()
-                console.print("[green]Guardado.[/green]")
+        should_exit.set()
+
+    console.print("\n[bold]Saliendo de Horizon...[/bold]")
+    if tray_icon:
+        try:
+            tray_icon.stop()
+        except Exception:
+            pass
+    set_console_visibility(True)
+
+    if new_ips_this_session:
+        console.print(f"Se detectaron [yellow]{len(new_ips_this_session)}[/yellow] IPs nuevas esta sesión.")
+        resp = console.input("¿Guardarlas como conocidas para no volver a resaltarlas? [s/N]: ")
+        if resp.strip().lower() == "s":
+            with lock:
+                known_ips.update(new_ips_this_session)
+            save_known_ips()
+            console.print("[green]Guardado.[/green]")
 
 
 if __name__ == "__main__":

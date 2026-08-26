@@ -27,6 +27,6 @@ Este proyecto está bajo la licencia GNU General Public License v3.0.
 Para creadores de contenido (Vídeos, Artículos, Demonstraciones) Si utilizas, muestras o haces un tutorial sobre estas herramientas en cualquier plataforma (YouTube, Twitch, Blogs, etc.):
 
 Atribución obligatoria: Debes mencionar de forma explícita la autoría original.
-Enlace principal: Debes incluir un enlace directo a este repositorio original (https://github.com/APNAPDEV/Neb_Tools) en la descripción del vídeo o artículo.
+Enlace principal: Debes incluir un enlace directo a este repositorio original (https://github.com/APNAPDEV/ARKcangel) en la descripción del vídeo o artículo.
 No autoría falsa: Queda estrictamente prohibido presentar estas herramientas o derivados como desarrollo propio.
 Modificaciones y Derivados ("Remix / Forks") Cualquier versión modificada, mejora o remix de este código debe mantener la misma licencia GPLv3, incluir un enlace visible a este repositorio como fuente original y especificar claramente los cambios realizados.
