@@ -4,13 +4,15 @@ ARKcangel
 
 Una suite de herramientas de seguridad y redes construida para vivir en la terminal.
 
-Tres proyectos, un mismo propósito: darte control total sobre tu red y tus datos sin depender de interfaces gráficas ni herramientas de terceros con caja negra.
+Cuatro proyectos, un mismo propósito: darte control total sobre tu red y tus datos sin depender de interfaces gráficas ni herramientas de terceros con caja negra.
 
 | NEBULA | Centro de herramientas de red y sistema: escaneo de puertos, ARP local, gestión de IP, cifrado simétrico con alfabeto dinámico y más — todo en un menú interactivo. |
 
 | NORTHSTAR | Gestor de contraseñas cifrado con AES + PBKDF2-SHA256 (600k iteraciones), verificación de integridad HMAC y medidor de entropía en tiempo real. |
 
 | HORIZON | Monitor de tráfico de red en vivo: conexiones activas, ancho de banda, consultas DNS y tráfico por proceso — todo en un dashboard de terminal. |
+
+| TERMITA | Gestor de aplicaciones instaladas en Windows: listado, búsqueda y desinstalación segura desde el registro (HKLM/HKCU, 32/64-bit), con exportación a CSV |
 
 Por qué existe
 
