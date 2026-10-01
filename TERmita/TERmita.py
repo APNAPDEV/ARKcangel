@@ -1,3 +1,14 @@
+# ==============================================================================
+# Proyecto: TERmita
+# Autor: APNAPDEV
+# Repositorio Oficial: https://github.com/APNAPDEV/ARKcangel
+# Licencia: GNU GPLv3
+#
+# Queda prohibida la redistribución o presentación de este código como propio
+# sin la debida atribución y enlace al repositorio original.
+# ==============================================================================
+
+# Autor original: Adrian C. — APNAPDEV © 2023-2026/2027
 """
 Gestor de Aplicaciones - Windows
 =================================
@@ -257,7 +268,9 @@ class GestorAplicacionesWindows:
                 )
         logger.info("Lista exportada a %s (%d aplicaciones).", ruta, len(apps))
 
-
+# En verdad es una locura lo que podemos lograr con el código 
+# si estas leyendo esto gracias por molestarte aunque sea en 
+# ver uno de mis códigos
 # --------------------------------------------------------------------------- #
 # Utilidades de sistema
 # --------------------------------------------------------------------------- #

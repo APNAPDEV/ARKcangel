@@ -151,7 +151,8 @@ def verificar_integridad(clave_maestra: str) -> bool:
 
     return hmac.compare_digest(firma_esperada, firma_guardada)
 
-
+# NorthStar es mi programa más querido despues de TERmita ya que con el empece a programar
+# Gracias por usar o simpplemente leer este código
 # ─────────────────────────────────────────────────────────────────────────────
 # EL CORE CRIPTOGRÁFICO
 # ─────────────────────────────────────────────────────────────────────────────
