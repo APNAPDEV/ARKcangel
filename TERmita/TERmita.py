@@ -1,14 +1,3 @@
-# ==============================================================================
-# Proyecto: TERmita
-# Autor: APNAPDEV
-# Repositorio Oficial: https://github.com/APNAPDEV/ARKcangel
-# Licencia: GNU GPLv3
-#
-# Queda prohibida la redistribución o presentación de este código como propio
-# sin la debida atribución y enlace al repositorio original.
-# ==============================================================================
-
-# Autor original: Adrian C. — APNAPDEV © 2023-2026/2027
 """
 Gestor de Aplicaciones - Windows
 =================================
@@ -32,7 +21,9 @@ from __future__ import annotations
 import csv
 import ctypes
 import logging
+import os
 import platform
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -55,7 +46,19 @@ from rich.table import Table
 # Logging
 # --------------------------------------------------------------------------- #
 
-LOG_DIR = Path(__file__).resolve().parent / "logs"
+def _directorio_base() -> Path:
+    """Carpeta donde vive el programa.
+
+    Si está empaquetado con PyInstaller (--onefile), sys.executable apunta
+    al .exe real; __file__ apuntaría a la carpeta temporal _MEIPASS, que se
+    borra al cerrar el programa, así que ahí no debe escribirse el log.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+LOG_DIR = _directorio_base() / "logs"
 LOG_FILE = LOG_DIR / "gestor_aplicaciones.log"
 
 
@@ -102,6 +105,8 @@ class Aplicacion:
     uninstall_string: Optional[str] = None
     quiet_uninstall_string: Optional[str] = None
     es_componente_sistema: bool = False
+    ruta_instalacion: Optional[str] = None
+    unidad: str = "Desconocida"  # "C:", "D:", "Red" o "Desconocida"
 
     @property
     def comando_desinstalacion(self) -> Optional[str]:
@@ -138,6 +143,23 @@ class GestorAplicacionesWindows:
             (winreg.HKEY_CURRENT_USER, 0, "HKCU"),
         ]
 
+    # Letra de unidad (no precedida por otra letra, para no confundir "https://")
+    _PATRON_UNIDAD = re.compile(r"(?<![A-Za-z])([A-Za-z]):[\\/]")
+
+    @classmethod
+    def _detectar_unidad(cls, *candidatos: Optional[str]) -> str:
+        """Deduce el disco de una app a partir de las rutas disponibles, en orden de fiabilidad."""
+        for texto in candidatos:
+            if not texto or not isinstance(texto, str):
+                continue
+            texto = os.path.expandvars(texto.strip().strip('"'))
+            if texto.startswith("\\\\"):
+                return "Red"
+            coincidencia = cls._PATRON_UNIDAD.search(texto)
+            if coincidencia:
+                return f"{coincidencia.group(1).upper()}:"
+        return "Desconocida"
+
     @staticmethod
     def _leer_valor(clave, nombre: str, por_defecto=None):
         try:
@@ -160,6 +182,16 @@ class GestorAplicacionesWindows:
                 if es_componente and not self.incluir_componentes_sistema:
                     return None
 
+                ruta_instalacion = self._leer_valor(clave_app, "InstallLocation")
+                display_icon = self._leer_valor(clave_app, "DisplayIcon")
+                uninstall_string = self._leer_valor(clave_app, "UninstallString")
+                quiet_uninstall_string = self._leer_valor(clave_app, "QuietUninstallString")
+
+                # Orden de fiabilidad: carpeta de instalación > icono (apunta al .exe) > desinstalador
+                unidad = self._detectar_unidad(
+                    ruta_instalacion, display_icon, uninstall_string, quiet_uninstall_string
+                )
+
                 return Aplicacion(
                     nombre=nombre,
                     origen=etiqueta,
@@ -167,9 +199,11 @@ class GestorAplicacionesWindows:
                     publisher=self._leer_valor(clave_app, "Publisher"),
                     fecha_instalacion=self._leer_valor(clave_app, "InstallDate"),
                     tamanio_kb=self._leer_valor(clave_app, "EstimatedSize"),
-                    uninstall_string=self._leer_valor(clave_app, "UninstallString"),
-                    quiet_uninstall_string=self._leer_valor(clave_app, "QuietUninstallString"),
+                    uninstall_string=uninstall_string,
+                    quiet_uninstall_string=quiet_uninstall_string,
                     es_componente_sistema=es_componente,
+                    ruta_instalacion=ruta_instalacion or None,
+                    unidad=unidad,
                 )
         except OSError as exc:
             logger.debug("No se pudo leer %s (%s): %s", subclave_nombre, etiqueta, exc)
@@ -219,10 +253,22 @@ class GestorAplicacionesWindows:
         logger.info("Escaneo completado: %d aplicaciones encontradas.", len(aplicaciones))
         return aplicaciones
 
-    def buscar_aplicaciones(self, consulta: str) -> List[Aplicacion]:
-        """Filtra la lista de aplicaciones por coincidencia parcial de nombre."""
+    def unidades_disponibles(self) -> List[str]:
+        """Unidades en las que hay al menos una aplicación detectada (ej. ['C:', 'D:'])."""
+        return sorted({a.unidad for a in self.listar_aplicaciones()})
+
+    def buscar_aplicaciones(
+        self, consulta: str = "", unidad: Optional[str] = None
+    ) -> List[Aplicacion]:
+        """Filtra por coincidencia parcial de nombre y/o por unidad (disco).
+
+        Con consulta vacía y unidad=None devuelve todas las aplicaciones.
+        """
         consulta = consulta.strip().lower()
-        return [a for a in self.listar_aplicaciones() if consulta in a.nombre.lower()]
+        return [
+            a for a in self.listar_aplicaciones()
+            if consulta in a.nombre.lower() and (unidad is None or a.unidad == unidad)
+        ]
 
     def desinstalar(self, app: Aplicacion) -> bool:
         """Ejecuta el comando de desinstalación asociado a la aplicación."""
@@ -260,17 +306,16 @@ class GestorAplicacionesWindows:
         apps = self.listar_aplicaciones()
         with ruta.open("w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
-            writer.writerow(["Nombre", "Versión", "Editor", "Origen", "Fecha instalación", "Tamaño (KB)"])
+            writer.writerow(["Nombre", "Versión", "Editor", "Origen", "Unidad", "Ubicación", "Fecha instalación", "Tamaño (KB)"])
             for a in apps:
                 writer.writerow(
                     [a.nombre, a.version or "", a.publisher or "", a.origen,
+                     a.unidad, a.ruta_instalacion or "",
                      a.fecha_instalacion or "", a.tamanio_kb or ""]
                 )
         logger.info("Lista exportada a %s (%d aplicaciones).", ruta, len(apps))
 
-# En verdad es una locura lo que podemos lograr con el código 
-# si estas leyendo esto gracias por molestarte aunque sea en 
-# ver uno de mis códigos
+
 # --------------------------------------------------------------------------- #
 # Utilidades de sistema
 # --------------------------------------------------------------------------- #
@@ -294,9 +339,12 @@ def mostrar_tabla(apps: List[Aplicacion]) -> None:
     tabla.add_column("Versión")
     tabla.add_column("Editor")
     tabla.add_column("Origen", justify="center")
+    tabla.add_column("Unidad", justify="center")
 
     for i, app in enumerate(apps, start=1):
-        tabla.add_row(str(i), app.nombre, app.version or "-", app.publisher or "-", app.origen)
+        tabla.add_row(
+            str(i), app.nombre, app.version or "-", app.publisher or "-", app.origen, app.unidad
+        )
 
     console.print(tabla)
 
@@ -308,14 +356,9 @@ def texto_toggle_componentes(incluir: bool) -> str:
 def menu_principal() -> None:
     console.print(
         Panel.fit(
-            """[bold cyan]
-               _____                    _ _        
-              |_   _|__ _ __ _ __ ___ (_) |_ __ _ 
-                | |/ _ \ '__| '_ ` _ \| | __/ _` |
-                | |  __/ |  | | | | | | | || (_| |
-                |_|\___|_|  |_| |_| |_|_|\__\__,_|
-            Consulta y desinstala programas instalados desde el registro.
-            """,
+            "[bold cyan]Gestor de Aplicaciones — Windows[/bold cyan]\n"
+            "Consulta y desinstala programas instalados desde el registro.",
+            border_style="cyan",
         )
     )
 
@@ -335,6 +378,7 @@ def menu_principal() -> None:
             "3": "Desinstalar una aplicación",
             "4": "Exportar lista a CSV",
             "5": texto_toggle_componentes(gestor.incluir_componentes_sistema),
+            "6": "Filtrar aplicaciones por unidad (disco)",
             "0": "Salir",
         }
 
@@ -391,6 +435,21 @@ def menu_principal() -> None:
                 apps_actuales = gestor.listar_aplicaciones(forzar_actualizacion=True)
             estado = "incluidos" if gestor.incluir_componentes_sistema else "ocultos"
             console.print(f"[cyan]Componentes del sistema {estado}.[/cyan]")
+
+        elif eleccion == "6":
+            with console.status("Escaneando el registro..."):
+                unidades = gestor.unidades_disponibles()
+            if not unidades:
+                console.print("[yellow]No hay aplicaciones detectadas.[/yellow]")
+                continue
+            unidad = Prompt.ask(
+                "Unidad a mostrar", choices=unidades + ["Todas"], default="Todas",
+                case_sensitive=False,
+            )
+            # Prompt con case_sensitive=False devuelve la opción tal cual está definida
+            filtro = None if unidad == "Todas" else unidad
+            apps_actuales = gestor.buscar_aplicaciones(unidad=filtro)
+            mostrar_tabla(apps_actuales)
 
         elif eleccion == "0":
             console.print("[bold cyan]¡Hasta luego![/bold cyan]")

@@ -14,9 +14,8 @@
 # (En Linux, pyperclip necesita xclip, xsel o wl-clipboard instalado.)
 
 
-# NOTA: NorthStar 6.2 Beta es la primera versión de NorthStar en la que se ha
+# NOTA: NorthStar 6.2.1 Beta es la primera versión de NorthStar en la que se ha
 # usado IA: parte de la versión 6.1 final, revisada y mejorada con ayuda de IA.
-# Esta app es muy especial para mi
 
 import atexit
 import base64
@@ -62,7 +61,7 @@ LOGO_ASCII = r"""
  | |\  | (_) | |  | |_| | | |___) | || (_| | |    /_  _\
  |_| \_|\___/|_|   \__|_| |_|____/ \__\__,_|_|      \/  
 
-          N O R T H S T A R  ·  v6.2 Beta  S E C U R E
+          N O R T H S T A R  ·  v6.2/1 ALPHA  S E C U R E
 """
 
 console = Console()
