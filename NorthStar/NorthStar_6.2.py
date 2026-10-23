@@ -14,9 +14,9 @@
 # (En Linux, pyperclip necesita xclip, xsel o wl-clipboard instalado.)
 
 
-# NOTA: NorthStar 6.2.1 Beta es la primera versión de NorthStar en la que se ha
+# NOTA: NorthStar 6.2.1a Beta es la primera versión de NorthStar en la que se ha
 # usado IA: parte de la versión 6.1 final, revisada y mejorada con ayuda de IA.
-
+# Imports importantes
 import atexit
 import base64
 import csv
@@ -35,7 +35,7 @@ import threading
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-
+#Rich imports
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
