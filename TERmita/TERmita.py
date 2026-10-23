@@ -41,6 +41,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
+from rich.text import Text
 
 # --------------------------------------------------------------------------- #
 # Logging
@@ -332,6 +333,45 @@ def es_admin() -> bool:
 # Interfaz de línea de comandos (Rich)
 # --------------------------------------------------------------------------- #
 
+# r"""...""": cadena cruda, las barras invertidas se conservan tal cual.
+LOGO = r"""
+████████╗███████╗██████╗ ███╗   ███╗██╗████████╗ █████╗ 
+╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║╚══██╔══╝██╔══██╗
+   ██║   █████╗  ██████╔╝██╔████╔██║██║   ██║   ███████║
+   ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║██║   ██║   ██╔══██║
+   ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║   ██║   ██║  ██║
+   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝   ╚═╝   ╚═╝  ╚═╝
+""".strip("\n")
+
+SUBTITULO = "Gestor de Aplicaciones — Windows"
+DESCRIPCION = "Consulta y desinstala programas instalados desde el registro."
+
+
+def _degradado(n, inicio=(0, 229, 255), fin=(41, 98, 255)):
+    """n colores 'rgb(r,g,b)' interpolados de inicio a fin (Rich los adapta al terminal)."""
+    pasos = max(n - 1, 1)
+    return [
+        "rgb({},{},{})".format(*(round(a + (b - a) * i / pasos) for a, b in zip(inicio, fin)))
+        for i in range(n)
+    ]
+
+
+def mostrar_banner() -> None:
+    lineas = LOGO.splitlines()
+    ancho_logo = max(len(linea) for linea in lineas)
+    ancho = max(ancho_logo, len(DESCRIPCION))
+    sangria = " " * ((ancho - ancho_logo) // 2)  # centra el dibujo como bloque, sin deformarlo
+
+    texto = Text()
+    for linea, color in zip(lineas, _degradado(len(lineas))):
+        texto.append(f"{sangria}{linea}\n", style=f"bold {color}")
+    texto.append("\n")
+    texto.append(f"{SUBTITULO.center(ancho)}\n", style="bold white")
+    texto.append(DESCRIPCION.center(ancho), style="dim")
+
+    console.print(Panel.fit(texto, border_style="cyan", padding=(1, 3)))
+
+
 def mostrar_tabla(apps: List[Aplicacion]) -> None:
     tabla = Table(title="Aplicaciones instaladas", box=box.ROUNDED, header_style="bold cyan")
     tabla.add_column("#", justify="right", style="dim")
@@ -354,13 +394,7 @@ def texto_toggle_componentes(incluir: bool) -> str:
 
 
 def menu_principal() -> None:
-    console.print(
-        Panel.fit(
-            "[bold cyan]Gestor de Aplicaciones — Windows[/bold cyan]\n"
-            "Consulta y desinstala programas instalados desde el registro.",
-            border_style="cyan",
-        )
-    )
+    mostrar_banner()
 
     if not es_admin():
         console.print(

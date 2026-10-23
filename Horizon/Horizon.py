@@ -30,7 +30,7 @@ Bandeja del sistema:
     - El núcleo (captura, detección de IPs nuevas, alertas) sigue funcionando
       aunque la ventana esté oculta; solo se pausa el redibujado en pantalla.
 """
-
+# Elementos del sistema
 import argparse
 import ctypes
 import json
@@ -42,7 +42,9 @@ import time
 from collections import deque, defaultdict
 from datetime import datetime
 
+
 import psutil
+# Diseño de la interfaz
 from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live

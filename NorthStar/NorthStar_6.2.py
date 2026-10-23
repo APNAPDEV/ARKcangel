@@ -61,7 +61,7 @@ LOGO_ASCII = r"""
  | |\  | (_) | |  | |_| | | |___) | || (_| | |    /_  _\
  |_| \_|\___/|_|   \__|_| |_|____/ \__\__,_|_|      \/  
 
-          N O R T H S T A R  ·  v6.2/1 ALPHA  S E C U R E
+          N O R T H S T A R  ·  v6.2  S E C U R E
 """
 
 console = Console()
