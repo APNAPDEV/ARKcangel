@@ -7,7 +7,7 @@
 # Queda prohibida la redistribución o presentación de este código como propio
 # sin la debida atribución y enlace al repositorio original.
 # ==============================================================================
-
+# Versión revisada 3h
 # Autor original: Adrian C. — APNAPDEV © 2023-2026/2027
 
 """
