@@ -1,5 +1,5 @@
 # ==============================================================================
-# Proyecto: NorthStar 6.2
+# Proyecto: TERmita 2.3a
 # Autor: APNAPDEV
 # Repositorio Oficial: https://github.com/APNAPDEV/ARKcangel
 # Licencia: GNU GPLv3
@@ -9,10 +9,6 @@
 # ==============================================================================
 
 # Autor original: Adrian C. — APNAPDEV © 2023-2026/2027
-
-# Dependencias:  pip install cryptography rich pyperclip
-# (En Linux, pyperclip necesita xclip, xsel o wl-clipboard instalado.)
-
 
 # NOTA: Termita 2.3a es la primera versión de Termita en la que se hace uso de IA
 
