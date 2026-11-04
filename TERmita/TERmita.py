@@ -66,7 +66,7 @@ from rich.text import Text
 # Constantes
 # --------------------------------------------------------------------------- #
 
-POR_PAGINA = 20  # filas por página en el listado
+POR_PAGINA = 50  # filas por página en el listado
 
 # Códigos de salida de los desinstaladores (los de Windows Installer incluidos)
 CODIGOS_SIN_ERROR = {0, 3010, 1641}   # éxito / éxito + reinicio necesario
