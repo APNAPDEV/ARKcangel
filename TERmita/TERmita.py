@@ -108,11 +108,11 @@ def _directorio_logs() -> Optional[Path]:
     Se prueba junto al programa y, si está en una ubicación de solo lectura
     (p. ej. Program Files), en %LOCALAPPDATA% y por último en la carpeta temporal.
     """
-    candidatos = [_directorio_base() / "logs"]
+    candidatos = [_directorio_base() / "logs_TER"]
     local = os.environ.get("LOCALAPPDATA")
     if local:
-        candidatos.append(Path(local) / "TERmita" / "logs")
-    candidatos.append(Path(tempfile.gettempdir()) / "TERmita" / "logs")
+        candidatos.append(Path(local) / "TERmita" / "logs_TER")
+    candidatos.append(Path(tempfile.gettempdir()) / "TERmita" / "logs_TER")
 
     for carpeta in candidatos:
         try:
